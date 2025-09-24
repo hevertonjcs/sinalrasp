@@ -1,4 +1,5 @@
 import random
+import inspect
 from datetime import datetime, timedelta
 from telegram import Bot, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
@@ -46,9 +47,11 @@ FRASES_SINAL = [
 
 ultimo_sinal = ""
 
+
 def gerar_horario_futuro(minutos: int) -> str:
     futuro = datetime.now() + timedelta(minutes=minutos)
     return futuro.strftime("%H:%M")
+
 
 def gerar_sinal() -> str:
     global ultimo_sinal
@@ -56,6 +59,7 @@ def gerar_sinal() -> str:
     minutos = random.choice([3, 5, 10, 13, 15])
     frase_extra = random.choice(FRASES_SINAL)
     link = "raspadinhatri.com"
+
     if escolha == 50:
         sinal = f"""
 APOSTA EM POTENCIAL {link.upper()}
@@ -79,18 +83,40 @@ Acesse: {link}
     ultimo_sinal = sinal
     return sinal
 
-async def enviar_se_apenas_adm(update: Update, context: ContextTypes.DEFAULT_TYPE, func):
-    try:
-        chat_member = await update.effective_chat.get_member(update.effective_user.id)
-        if chat_member.status in ["administrator", "creator"]:
-            await func(update, context)
-        else:
-            await update.message.reply_text("Apenas administradores podem usar este comando.")
-    except BadRequest:
-        await update.message.reply_text("Não foi possível verificar permissões.")
 
+def enviar_se_apenas_adm(func):
+    """Decorator que restringe comandos a administradores"""
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            chat_member = await update.effective_chat.get_member(update.effective_user.id)
+            if chat_member.status in ["administrator", "creator"]:
+                if inspect.iscoroutinefunction(func):
+                    return await func(update, context)
+                else:
+                    return func(update, context)
+            else:
+                await update.message.reply_text("❌ Apenas administradores podem usar este comando.")
+        except BadRequest:
+            await update.message.reply_text("⚠️ Não foi possível verificar permissões.")
+    return wrapper
+
+
+@enviar_se_apenas_adm
 async def comando_sinal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(gerar_sinal())
+
+
+@enviar_se_apenas_adm
+async def start_loop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    asyncio.create_task(loop_atividade(context.bot))
+    await update.message.reply_text("Loop de sinais iniciado ✅")
+
+
+@enviar_se_apenas_adm
+async def stop_loop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Loop encerrado ❌")
+    asyncio.get_event_loop().stop()
+
 
 async def comando_last(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if ultimo_sinal:
@@ -98,9 +124,11 @@ async def comando_last(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Ainda não foi enviado nenhum sinal.")
 
+
 async def comando_b(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = random.choice(MENSAGENS_BUSCA)
     await update.message.reply_text(msg)
+
 
 async def loop_atividade(bot: Bot):
     enviados_especiais = 0
@@ -128,21 +156,17 @@ async def loop_atividade(bot: Bot):
                 await bot.send_message(chat_id=CHAT_ID, text=msg)
                 enviados_especiais += 1
 
-async def start_loop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    asyncio.create_task(loop_atividade(context.bot))
-    await update.message.reply_text("Loop de sinais iniciado ✅")
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Comandos restritos a admins
-    app.add_handler(CommandHandler("sinal", lambda u, c: enviar_se_apenas_adm(u, c, comando_sinal)))
-    app.add_handler(CommandHandler("start", lambda u, c: enviar_se_apenas_adm(u, c, start_loop)))
-    app.add_handler(CommandHandler("stop", lambda u, c: enviar_se_apenas_adm(u, c, lambda u2, c2: asyncio.get_event_loop().stop())))
+    # Comandos restritos
+    app.add_handler(CommandHandler("sinal", comando_sinal))
+    app.add_handler(CommandHandler("start", start_loop))
+    app.add_handler(CommandHandler("stop", stop_loop))
 
     # Comandos liberados
     app.add_handler(CommandHandler("last", comando_last))
     app.add_handler(CommandHandler("b", comando_b))
 
-    # Executa polling sem asyncio.run()
     app.run_polling()
