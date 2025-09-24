@@ -8,7 +8,7 @@ import asyncio
 
 BOT_TOKEN = "7401293219:AAFDt9G2wlozVa1zNGU-A50Uj9R1yCh3zE8"
 CHAT_ID = "-4935359876"
-INTERVALOS = [3, 5, 6, 7, 8, 10, 12]
+INTERVALOS = [2, 3, 4, 5, 6]  # mais rápido
 
 MENSAGENS_PRESENCA = [
     "Bot ativo ✅",
@@ -46,7 +46,8 @@ FRASES_SINAL = [
 ]
 
 ultimo_sinal = ""
-loop_rodando = False  # controla se o loop está ativo
+loop_rodando = False
+ultimo_aviso_fixado = None  # guarda o ID do aviso fixado
 
 
 def gerar_horario_futuro(minutos: int) -> str:
@@ -57,7 +58,7 @@ def gerar_horario_futuro(minutos: int) -> str:
 def gerar_sinal() -> str:
     global ultimo_sinal
     escolha = random.choice([50, 100])
-    minutos = random.choice([3, 5, 10])
+    minutos = random.choice([2, 3, 4, 5])
     frase_extra = random.choice(FRASES_SINAL)
     link = "raspadinhatri.com"
 
@@ -86,7 +87,7 @@ Acesse: {link}
 
 
 def enviar_se_apenas_adm(func):
-    """Decorator que restringe comandos a administradores"""
+    """Decorator para restringir comandos a administradores"""
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             chat_member = await update.effective_chat.get_member(update.effective_user.id)
@@ -137,27 +138,61 @@ async def comando_b(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg)
 
 
+@enviar_se_apenas_adm
+async def comando_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Lê comando.txt, envia e fixa. Substitui aviso anterior fixado."""
+    global ultimo_aviso_fixado
+    try:
+        with open("comando.txt", "r", encoding="utf-8") as f:
+            conteudo = f.read().strip()
+
+        if not conteudo:
+            await update.message.reply_text("⚠️ O arquivo comando.txt está vazio.")
+            return
+
+        # envia aviso
+        sent = await context.bot.send_message(chat_id=CHAT_ID, text=conteudo)
+
+        # desfixa o anterior se existir
+        if ultimo_aviso_fixado:
+            try:
+                await context.bot.unpin_chat_message(chat_id=CHAT_ID, message_id=ultimo_aviso_fixado)
+            except Exception:
+                pass  # ignora se já não estiver fixado
+
+        # fixa o novo
+        try:
+            await context.bot.pin_chat_message(chat_id=CHAT_ID, message_id=sent.message_id, disable_notification=True)
+            ultimo_aviso_fixado = sent.message_id
+        except Exception as e:
+            await update.message.reply_text(f"⚠️ Aviso enviado, mas não consegui fixar: {e}")
+
+    except FileNotFoundError:
+        await update.message.reply_text("❌ O arquivo comando.txt não foi encontrado.")
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Erro ao ler comando.txt: {e}")
+
+
 async def loop_atividade(bot: Bot):
     global loop_rodando
     while loop_rodando:
         try:
-            # 1) Mensagem de presença
+            # Mensagem de presença
             mensagem_presenca = random.choice(MENSAGENS_PRESENCA)
             await bot.send_message(chat_id=CHAT_ID, text=mensagem_presenca)
-            await asyncio.sleep(random.randint(60, 120))
+            await asyncio.sleep(random.randint(30, 60))
 
-            # 2) Envia sinal
+            # Sinal
             sinal = gerar_sinal()
             await bot.send_message(chat_id=CHAT_ID, text=sinal)
 
-            # 3) Já agenda o próximo sinal, sem pausa longa
             intervalo = random.choice(INTERVALOS)
             await asyncio.sleep(intervalo * 60)
 
         except Exception as e:
             print(f"Erro no loop principal: {e}")
             await bot.send_message(chat_id=CHAT_ID, text="⚠️ Ocorreu um erro no loop, tentando continuar...")
-            await asyncio.sleep(10)  # pausa curta antes de retomar
+            await asyncio.sleep(5)
 
 
 # Handler global de erros
@@ -177,6 +212,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("sinal", comando_sinal))
     app.add_handler(CommandHandler("start", start_loop))
     app.add_handler(CommandHandler("stop", stop_loop))
+    app.add_handler(CommandHandler("aviso", comando_aviso))
 
     # Comandos liberados
     app.add_handler(CommandHandler("last", comando_last))
