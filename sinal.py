@@ -3,14 +3,14 @@ import asyncio
 from datetime import datetime, timedelta
 from telegram import Bot, Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
+from telegram.error import BadRequest
 
 # --- CONFIGURAÇÕES ---
 BOT_TOKEN = "7401293219:AAFDt9G2wlozVa1zNGU-A50Uj9R1yCh3zE8"
 CHAT_ID = "-4935359876"
+INTERVALOS = [3, 5, 6, 7, 8, 10]
 
-INTERVALOS = [3, 5, 6, 7, 8, 10, 12, 25, 30]
-
-# Mensagens de presença/atividade com variações
+# Mensagens de presença/atividade
 MENSAGENS_PRESENCA = [
     "Bot ativo ✅",
     "Analisando padrões… 🔎",
@@ -38,7 +38,17 @@ MENSAGENS_BUSCA = [
     "Verificando probabilidades e chances 💡",
 ]
 
-# Guardar o último sinal em memória
+# Frases adicionais para sinais (variações internas)
+FRASES_SINAL = [
+    "Não perca esta chance! 💎",
+    "Confira e aproveite a oportunidade! 🚀",
+    "Potencial de lucro alto! 📈",
+    "Sinal baseado nos últimos padrões vencedores 🔍",
+    "Risco calculado, aposta estratégica 🏆",
+    "Atenção! Pode ser um grande vencedor 💰",
+]
+
+# Guardar o último sinal
 ultimo_sinal = ""
 
 # --- FUNÇÕES ---
@@ -50,6 +60,7 @@ def gerar_sinal() -> str:
     global ultimo_sinal
     escolha = random.choice([50, 100])
     minutos = random.choice([3, 5, 10, 13, 15])
+    frase_extra = random.choice(FRASES_SINAL)
     link = "raspadinhatri.com"
     if escolha == 50:
         sinal = f"""
@@ -58,6 +69,7 @@ APOSTA EM POTENCIAL {link.upper()}
 RASPADINHA DE R$ 50 (DOBRO DE CHANCE) ✅
 Lucro em Potencial 📈
 Em {minutos} Minutos ⏰ ({gerar_horario_futuro(minutos)})
+{frase_extra}
 Acesse: {link}
 """
     else:
@@ -67,12 +79,23 @@ APOSTA EM POTENCIAL {link.upper()}
 RASPADINHA DE R$ 100 (TRIPLO DE CHANCE) ✅
 Lucro em Potencial 📈
 Em {minutos} Minutos ⏰ ({gerar_horario_futuro(minutos)})
+{frase_extra}
 Acesse: {link}
 """
     ultimo_sinal = sinal
     return sinal
 
-# --- Handlers de comandos ---
+async def enviar_se_apenas_adm(update: Update, context: ContextTypes.DEFAULT_TYPE, func):
+    """Executa a função apenas se o usuário for administrador do grupo"""
+    try:
+        chat_member = await update.effective_chat.get_member(update.effective_user.id)
+        if chat_member.status in ["administrator", "creator"]:
+            await func(update, context)
+        else:
+            await update.message.reply_text("Apenas administradores podem usar este comando.")
+    except BadRequest:
+        await update.message.reply_text("Não foi possível verificar permissões.")
+
 async def comando_sinal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(gerar_sinal())
 
@@ -114,21 +137,22 @@ async def loop_atividade(bot: Bot):
                 await bot.send_message(chat_id=CHAT_ID, text=msg)
                 enviados_especiais += 1
 
-# --- INÍCIO ---
-if __name__ == "__main__":
+# --- FUNÇÃO PRINCIPAL ---
+async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-    bot = app.bot
-
-    # Comandos
-    app.add_handler(CommandHandler("sinal", comando_sinal))
+    
+    # Comandos restritos a admins
+    app.add_handler(CommandHandler("sinal", lambda u, c: enviar_se_apenas_adm(u, c, comando_sinal)))
+    app.add_handler(CommandHandler("start", lambda u, c: enviar_se_apenas_adm(u, c, lambda u2, c2: asyncio.create_task(loop_atividade(app.bot)))))
+    app.add_handler(CommandHandler("stop", lambda u, c: enviar_se_apenas_adm(u, c, lambda u2, c2: asyncio.get_event_loop().stop())))
+    
+    # Comandos liberados
     app.add_handler(CommandHandler("last", comando_last))
     app.add_handler(CommandHandler("b", comando_b))
+    
+    # Rodar polling
+    await app.run_polling()
 
-    # Loop de presença e sinais
-    async def start_loop():
-        await loop_atividade(bot)
-
-    asyncio.create_task(start_loop())
-
-    # Rodar o bot
-    app.run_polling()
+# --- EXECUTAR BOT ---
+if __name__ == "__main__":
+    asyncio.run(main())
