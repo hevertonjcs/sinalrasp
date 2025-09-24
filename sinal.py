@@ -29,7 +29,7 @@ MENSAGENS_BUSCA = [
     "Verificando últimos ganhadores 🏆",
     "Calculando oportunidades de Raspadinha 💰",
     "Monitorando estatísticas atuais 📈",
-    "Preparando próximo sinal estratégico ⏱️",
+    "Preparando próximo sinal garantido ⏱️",
     "Buscando padrões de vitória recentes 🔍",
     "Analisando tendências do dia… 🧐",
     "Processando dados e padrões atuais 📊",
@@ -37,12 +37,12 @@ MENSAGENS_BUSCA = [
 ]
 
 FRASES_SINAL = [
-    "Não perca esta chance! 💎",
-    "Confira e aproveite a oportunidade! 🚀",
-    "Potencial de lucro alto! 📈",
-    "Sinal baseado nos últimos padrões vencedores 🔍",
-    "Risco calculado, aposta estratégica 🏆",
-    "Atenção! Pode ser um grande vencedor 💰",
+    "Não perca esta chance! Ganho Garantido 💎",
+    "Confira e aproveite a oportunidade de ganhar de verdade! 🚀",
+    "Potencial de lucro alto garantido! 📈",
+    "Sinal Garantido baseado nos últimos padrões vencedores 🔍",
+    "Risco calculado, aposta estratégica e garantida 🏆",
+    "Atenção! Pode ser um grande vencedor garantido 💰",
 ]
 
 ultimo_sinal = ""
@@ -222,3 +222,4 @@ if __name__ == "__main__":
     app.add_error_handler(error_handler)
 
     app.run_polling()
+
