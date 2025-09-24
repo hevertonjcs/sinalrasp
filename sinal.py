@@ -8,7 +8,7 @@ import asyncio
 
 BOT_TOKEN = "7401293219:AAFDt9G2wlozVa1zNGU-A50Uj9R1yCh3zE8"
 CHAT_ID = "-4935359876"
-INTERVALOS = [3, 5, 6, 7, 8, 10, 12, 25, 30]
+INTERVALOS = [3, 5, 6, 7, 8, 10, 12]
 
 MENSAGENS_PRESENCA = [
     "Bot ativo ✅",
@@ -46,6 +46,7 @@ FRASES_SINAL = [
 ]
 
 ultimo_sinal = ""
+loop_rodando = False  # controla se o loop está ativo
 
 
 def gerar_horario_futuro(minutos: int) -> str:
@@ -56,7 +57,7 @@ def gerar_horario_futuro(minutos: int) -> str:
 def gerar_sinal() -> str:
     global ultimo_sinal
     escolha = random.choice([50, 100])
-    minutos = random.choice([3, 5, 10, 13, 15])
+    minutos = random.choice([3, 5, 10])
     frase_extra = random.choice(FRASES_SINAL)
     link = "raspadinhatri.com"
 
@@ -108,14 +109,20 @@ async def comando_sinal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @enviar_se_apenas_adm
 async def start_loop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    asyncio.create_task(loop_atividade(context.bot))
-    await update.message.reply_text("Loop de sinais iniciado ✅")
+    global loop_rodando
+    if not loop_rodando:
+        loop_rodando = True
+        asyncio.create_task(loop_atividade(context.bot))
+        await update.message.reply_text("🤖 Bot ativado e em operação!")
+    else:
+        await update.message.reply_text("⚠️ O bot já está em execução.")
 
 
 @enviar_se_apenas_adm
 async def stop_loop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Loop encerrado ❌")
-    asyncio.get_event_loop().stop()
+    global loop_rodando
+    loop_rodando = False
+    await update.message.reply_text("❌ Bot desativado.")
 
 
 async def comando_last(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -131,30 +138,36 @@ async def comando_b(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def loop_atividade(bot: Bot):
-    enviados_especiais = 0
-    while True:
-        agora = datetime.now()
-        hora = agora.hour
+    global loop_rodando
+    while loop_rodando:
+        try:
+            # 1) Mensagem de presença
+            mensagem_presenca = random.choice(MENSAGENS_PRESENCA)
+            await bot.send_message(chat_id=CHAT_ID, text=mensagem_presenca)
+            await asyncio.sleep(random.randint(60, 120))
 
-        # Mensagens de presença a cada 1-2 minutos
-        mensagem_presenca = random.choice(MENSAGENS_PRESENCA)
-        await bot.send_message(chat_id=CHAT_ID, text=mensagem_presenca)
-        await asyncio.sleep(random.randint(60, 120))
+            # 2) Envia sinal
+            sinal = gerar_sinal()
+            await bot.send_message(chat_id=CHAT_ID, text=sinal)
 
-        if 8 <= hora < 24:
-            # Sinais automáticos
+            # 3) Já agenda o próximo sinal, sem pausa longa
             intervalo = random.choice(INTERVALOS)
             await asyncio.sleep(intervalo * 60)
-            await bot.send_message(chat_id=CHAT_ID, text=gerar_sinal())
-        else:
-            if enviados_especiais < 3 and random.random() < 0.05:
-                msg = f"""
-🌙 SINAL ESPECIAL DA MADRUGADA 🌙
 
-{gerar_sinal()}
-"""
-                await bot.send_message(chat_id=CHAT_ID, text=msg)
-                enviados_especiais += 1
+        except Exception as e:
+            print(f"Erro no loop principal: {e}")
+            await bot.send_message(chat_id=CHAT_ID, text="⚠️ Ocorreu um erro no loop, tentando continuar...")
+            await asyncio.sleep(10)  # pausa curta antes de retomar
+
+
+# Handler global de erros
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    print(f"Erro detectado: {context.error}")
+    if isinstance(update, Update) and update.effective_chat:
+        try:
+            await update.effective_chat.send_message("⚠️ Ocorreu um erro inesperado, mas estou me recuperando.")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
@@ -168,5 +181,8 @@ if __name__ == "__main__":
     # Comandos liberados
     app.add_handler(CommandHandler("last", comando_last))
     app.add_handler(CommandHandler("b", comando_b))
+
+    # Handler global de erros
+    app.add_error_handler(error_handler)
 
     app.run_polling()
